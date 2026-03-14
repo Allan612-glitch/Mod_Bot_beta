@@ -5,15 +5,16 @@ from discord import app_commands
 from dotenv import load_dotenv
 import datetime
 import sqlite3
-
+# Base directory
 Base_dir = os.path.dirname(os.path.abspath(__file__))
+# Add your naughty words here
 naughty_words = ["--placeholder--"]
 
 load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 
-
+#create a database to store the number of warnings per user
 def create_user_table():
     conn = sqlite3.connect(os.path.join(Base_dir, "users_warning.db"))
     cursor = conn.cursor()
@@ -32,7 +33,7 @@ def create_user_table():
 
 create_user_table()
 
-
+#increase the number of warnings per user
 def increase_and_get_warning_count(user_id, guild_id):
     conn = sqlite3.connect(os.path.join(Base_dir, "users_warning.db"))
     cursor = conn.cursor()
@@ -79,7 +80,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"Logged in as {bot.user.name}, bot is online")
 
-
+#check if the message contains a naughty word
 @bot.event
 async def on_message(message):
     if message.author.id != bot.user.id:
@@ -126,7 +127,7 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-
+#clear the number of warnings per user
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def clearwarnings(ctx, member: discord.Member):
