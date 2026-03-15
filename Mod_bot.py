@@ -186,9 +186,20 @@ async def clearwarnings_error(ctx, error):
 
 @bot.command()
 @commands.has_permissions(moderate_members=True)
-async def addword(ctx, word: str):
-    naughty_words.append(word.lower())
-    await ctx.send(f"Added '{word}' to the list of naughty words.")
+async def add_word(ctx, word: str):
+    conn = sqlite3.connect(os.path.join(Base_dir, "naughty_words.db"))
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO naughty_words (word, guild_id) VALUES (?, ?)",
+            (word.lower(), ctx.guild.id)
+        )
+        conn.commit()
+        await ctx.send(f"Added '{word}' to the banned words list for this server.")
+    except sqlite3.IntegrityError:
+        await ctx.send(f"'{word}' is already in the banned words list.")
+    finally:
+        conn.close()
 
 
 
