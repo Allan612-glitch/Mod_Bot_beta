@@ -153,6 +153,13 @@ async def clearwarnings_error(ctx, error):
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("Member not found.")
 
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def add_word(ctx, word: str):
+    naughty_words.append(word.lower())
+    await ctx.send(f"Added '{word}' to the list of naughty words.")
+
+
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
