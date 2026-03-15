@@ -8,7 +8,6 @@ import sqlite3
 # Base directory
 Base_dir = os.path.dirname(os.path.abspath(__file__))
 # Add your naughty words here
-#naughty_words = ["--placeholder--"]
 
 load_dotenv()
 intents = discord.Intents.default()
@@ -30,7 +29,7 @@ def create_user_table():
 
     conn.commit()
     conn.close()
-
+#create a database to store the naughty words
 def naughty_words_table():
     conn = sqlite3.connect(os.path.join(Base_dir, "naughty_words.db"))
     cursor = conn.cursor()
@@ -110,6 +109,17 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}, bot is online")
+    
+#send a message when the bot joins a server
+@bot.event
+async def on_guild_join(guild):
+    for channel in guild.text_channels:
+        if channel.permissions_for(guild.me).send_messages:
+            await channel.send("Hello! I am a moderation bot built by             Allancash123.\n"
+                               "My main purpose is to assist with moderation tasks.\n"
+                              "I automatically filter banned words and warn         users.\n\n"
+                              "Use `!about` to learn about me.\n"
+                              "Use `!commands` to see my command list.")
 
 #check if the message contains a naughty word
 @bot.event
@@ -183,7 +193,7 @@ async def clearwarnings_error(ctx, error):
         await ctx.send("You do not have permission to use this command.")
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("Member not found.")
-
+# add a naughty word to the database
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def addword(ctx, word: str):
@@ -201,6 +211,7 @@ async def addword(ctx, word: str):
     finally:
         conn.close()
 
+#remove a naughty word from the database
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def removeword(ctx, word: str):
@@ -217,6 +228,30 @@ async def removeword(ctx, word: str):
         await ctx.send(f"Removed '{word}' from the banned words list for this server.")
     else:
          await ctx.send(f"'{word}' is not in the banned words list.")
+#command list
+@bot.command()
+async def commands(ctx):
+    commands_list = ("**Bot Command List**\n\n"
+                    "`!about` - Shows information about the bot\n"
+                    "`!commands` - Shows this command list\n"
+                    "`!addword <word>` - Add a banned word (Moderators only)\n"
+                    "`!removeword <word>` - Remove a banned word (Moderators only)\n"
+                    "`!clearwarnings <member>` - Clear a user's warnings (Moderators only)\n")
+    await ctx.send(commands_list)
+#about section
+@bot.command()
+async def about(ctx):
+    about_message = ("**Moderation Bot**\n"
+                    "This bot helps moderate the server by filtering banned words "
+                    "and issuing warnings to users who use them.\n\n"
+                    "**How it works:**\n"
+                    "- If a user says a banned word, they get a warning.\n"
+                    "- 2nd warning = 1 hour timeout.\n"
+                    "- 3rd warning = 2 hour timeout.\n\n"
+                    "Use `!commands` to see the full list of commands."
+                    )
+    await ctx.send(about_message)
+
 
 
 
