@@ -216,7 +216,7 @@ async def removeword(ctx, word: str):
     if removed:
         await ctx.send(f"Removed '{word}' from the banned words list for this server.")
     else:
-        await ctx.send(f"'{word}' is not in the banned words list.")
+         await ctx.send(f"'{word}' is not in the banned words list.")
 
 
 
