@@ -14,6 +14,22 @@ load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 
+char_substitutions = {
+    '@': 'a', '4': 'a', '^': 'a',
+    '3': 'e',
+    '1': 'i', '!': 'i', '|': 'i',
+    '0': 'o',
+    '$': 's', '5': 's',
+    '7': 't', '+': 't',
+    '9': 'g',
+}
+
+def normalize(text):
+    text = text.lower()
+    text = ''.join(char_substitutions.get(c, c) for c in text)
+    text = text.replace(' ', '')
+    return text
+
 #create a database to store the number of warnings per user
 def create_user_table():
     conn = sqlite3.connect(os.path.join(Base_dir, "users_warning.db"))
@@ -84,8 +100,9 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     if message.author.id != bot.user.id:
+        normalized_content = normalize(message.content)
         for word in naughty_words:
-            if word.lower() in message.content.lower():
+            if normalize(word) in normalized_content:
                 num_warnings = increase_and_get_warning_count(
                     message.author.id, message.guild.id
                 )
