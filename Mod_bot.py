@@ -186,7 +186,7 @@ async def clearwarnings_error(ctx, error):
 
 @bot.command()
 @commands.has_permissions(moderate_members=True)
-async def add_word(ctx, word: str):
+async def addword(ctx, word: str):
     conn = sqlite3.connect(os.path.join(Base_dir, "naughty_words.db"))
     cursor = conn.cursor()
     try:
@@ -203,21 +203,20 @@ async def add_word(ctx, word: str):
 
 @bot.command()
 @commands.has_permissions(moderate_members=True)
-async def remove_word(ctx, word: str):
+async def removeword(ctx, word: str):
     conn = sqlite3.connect(os.path.join(Base_dir, "naughty_words.db"))
     cursor = conn.cursor()
-    try:
-        
-        cursor.execute(
-            "DELETE FROM naughty_words WHERE word = ? AND guild_id = ?",
-            (word.lower(), ctx.guild.id)
-        )
-        conn.commit()
+    cursor.execute(
+        "DELETE FROM naughty_words WHERE word = ? AND guild_id = ?",
+        (word.lower(), ctx.guild.id)
+    )
+    conn.commit()
+    removed = cursor.rowcount
+    conn.close()
+    if removed:
         await ctx.send(f"Removed '{word}' from the banned words list for this server.")
-    except sqlite3.IntegrityError:
+    else:
         await ctx.send(f"'{word}' is not in the banned words list.")
-    finally:
-        conn.close()
 
 
 
