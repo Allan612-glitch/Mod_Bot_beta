@@ -13,6 +13,33 @@ load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 
+def create_logs_table():
+    conn = sqlite3.connect(os.path.join(Base_dir, "mod_logs.db"))
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mod_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            guild_id INTEGER,
+            infraction_type TEXT, -- 'Warning' or 'Timeout'
+            message_content TEXT,
+            timestamp DATETIME
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# save data
+def log_infraction(user_id, username, guild_id, infraction_type, content):
+    conn = sqlite3.connect(os.path.join(Base_dir, "mod_logs.db"))
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO mod_logs (user_id, username, guild_id, infraction_type, message_content, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (user_id, username, guild_id, infraction_type, content, datetime.datetime.now()))
+    conn.commit()
+    conn.close()
 
 #create a database to store the number of warnings per user
 def create_user_table():
@@ -44,7 +71,7 @@ def naughty_words_table():
     conn.commit()
     conn.close()
 
-
+create_logs_table()
 naughty_words_table()
 create_user_table()
 
@@ -124,48 +151,68 @@ async def on_guild_join(guild):
 #check if the message contains a naughty word
 @bot.event
 async def on_message(message):
-    if message.author.id != bot.user.id:
-        naughty_words = get_naughty_words(message.guild.id)
-        for word in naughty_words:
-            if word.lower() in message.content.lower():
-                num_warnings = increase_and_get_warning_count(
-                    message.author.id, message.guild.id
+
+    if message.author.id == bot.user.id:
+        return
+
+    naughty_words = get_naughty_words(message.guild.id)
+
+    for word in naughty_words:
+        if word.lower() in message.content.lower():
+            num_warnings = increase_and_get_warning_count(
+                message.author.id, message.guild.id
+            )
+
+            clean_content = (message.content[:100] + '..') if len(message.content) > 100 else message.content
+
+            if num_warnings >= 3:
+                log_infraction(message.author.id, str(message.author), message.guild.id, "Timeout (2hr)", clean_content)
+                
+                await message.author.timeout(
+                    datetime.timedelta(minutes=120),
+                    reason="Exceeded naughty word limit (3+ warnings)",
                 )
-
-                if num_warnings >= 3:
-                    await message.author.timeout(
-                        datetime.timedelta(minutes=120),
-                        reason="Saying too much naughty words",
-                    )
-                    await message.channel.send(
-                        f"{message.author.mention} has been timed out for 2 hours for saying too much naughty words"
-                    )
-                    await message.delete()
-                    break
-
-                if num_warnings == 1:
+                await message.channel.send(
+                    f"{message.author.mention} has been timed out for 2 hours for saying too many naughty words."
+                )
+                await message.delete()
+                break
+            
+            if num_warnings == 1:
+                log_infraction(message.author.id, str(message.author), message.guild.id, "Warning #1", clean_content)
+                
+                try:
                     await message.author.send(
-                        "Please do not say naughty words, you have been warned, 1 more time and you'll be timed out for an hour"
+                        "Please do not say naughty words. You have been warned. One more time and you'll be timed out for an hour."
                     )
-                    await message.channel.send(
-                        f"{message.author.mention} Please do not say naughty words"
-                    )
-                    await message.delete()
-                    break
+                except discord.Forbidden:
+                    pass
 
-                if num_warnings == 2:
-                    await message.author.timeout(
-                        datetime.timedelta(minutes=60),
-                        reason="Saying too much naughty words",
-                    )
+                await message.channel.send(
+                    f"{message.author.mention} Please do not say naughty words."
+                )
+                await message.delete()
+                break
+
+            if num_warnings == 2:
+                log_infraction(message.author.id, str(message.author), message.guild.id, "Timeout (1hr)", clean_content)
+                
+                await message.author.timeout(
+                    datetime.timedelta(minutes=60),
+                    reason="Second naughty word warning",
+                )
+                try:
                     await message.author.send(
-                        "You have been timed out for an hour for saying too much naughty words, one more time and you'll be timed out for 2 hours"
+                        "You have been timed out for an hour for saying too many naughty words. One more time and you'll be timed out for 2 hours."
                     )
-                    await message.channel.send(
-                        f"{message.author.mention} has been timed out for an hour for saying too much naughty words"
-                    )
-                    await message.delete()
-                    break
+                except discord.Forbidden:
+                    pass
+
+                await message.channel.send(
+                    f"{message.author.mention} has been timed out for an hour for saying too many naughty words."
+                )
+                await message.delete()
+                break
 
     await bot.process_commands(message)
 
@@ -228,6 +275,55 @@ async def removeword(ctx, word: str):
         await ctx.send(f"Removed '{word}' from the banned words list for this server.")
     else:
          await ctx.send(f"'{word}' is not in the banned words list.")
+         
+# Print logs of what happened        
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def logs(ctx, member: discord.Member):
+    conn = sqlite3.connect(os.path.join(Base_dir, "mod_logs.db"))
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT infraction_type, message_content, timestamp 
+        FROM mod_logs 
+        WHERE user_id = ? AND guild_id = ?
+        ORDER BY timestamp DESC LIMIT 10
+    """, (member.id, ctx.guild.id))
+    
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        await ctx.send(f"No logs found for {member.display_name}.")
+        return
+
+    log_text = f"**Recent logs for {member.mention}:**\n"
+    for type, content, time in rows:
+        # Formatting the timestamp string for readability
+        clean_time = time[:19] 
+        log_text += f"• `[{clean_time}]` **{type}**: \"{content}\"\n"
+
+    await ctx.send(log_text)     
+         
+# List all naughty words for the current server
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def listwords(ctx):
+    words = get_naughty_words(ctx.guild.id)
+    
+    if not words:
+        await ctx.send("There are currently no banned words in this server.")
+        return
+
+    # Joining the words into a readable string
+    word_list_string = ", ".join(f"`{word}`" for word in words)
+    
+    embed = discord.Embed(
+        title="Banned Words List",
+        description=word_list_string,
+        color=discord.Color.red()
+    )
+    await ctx.send(embed=embed)
+         
 #command list
 @bot.command()
 async def commands(ctx):
@@ -236,8 +332,10 @@ async def commands(ctx):
                     "`!commands` - Shows this command list\n"
                     "`!addword <word>` - Add a banned word (Moderators only)\n"
                     "`!removeword <word>` - Remove a banned word (Moderators only)\n"
+                    "`!listwords` - See all banned words (Moderators only)\n"
                     "`!clearwarnings <member>` - Clear a user's warnings (Moderators only)\n")
     await ctx.send(commands_list)
+    
 #about section
 @bot.command()
 async def about(ctx):
